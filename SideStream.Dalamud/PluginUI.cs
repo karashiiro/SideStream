@@ -27,7 +27,10 @@ namespace SideStream.Dalamud
         }
 
         public void RegisterChannel(string channel)
-            => this.chatState.Add(channel, new ConcurrentQueue<ChatMessage>());
+        {
+            this.chatState.Add(channel, new ConcurrentQueue<ChatMessage>());
+            this.currentChannel = channel;
+        }
 
         public void UnregisterChannel(string channel)
             => this.chatState.Remove(channel);
@@ -54,11 +57,14 @@ namespace SideStream.Dalamud
                 DrawTabs();
                 
                 ImGui.BeginChildFrame(0x92929292, ImGui.GetWindowSize() - new Vector2(16f, 94f));
-                foreach (var message in this.chatState[this.currentChannel])
+                if (!string.IsNullOrEmpty(this.currentChannel))
                 {
-                    if (this.hideNegativeMessages && message.CompoundScore < 0)
-                        continue;
-                    ImGui.TextWrapped($"{message.Sender}: {message.Text}");
+                    foreach (var message in this.chatState[this.currentChannel])
+                    {
+                        if (this.hideNegativeMessages && message.CompoundScore < 0)
+                            continue;
+                        ImGui.TextWrapped($"{message.Sender}: {message.Text}");
+                    }
                 }
                 ImGui.EndChildFrame();
 
@@ -69,13 +75,16 @@ namespace SideStream.Dalamud
                     500,
                     ImGuiInputTextFlags.EnterReturnsTrue))
                 {
-                    this.twitch.SendMessage(this.currentChannel, this.chatInput);
-                    PushMessage(this.currentChannel, new ChatMessage
+                    if (!string.IsNullOrEmpty(this.currentChannel))
                     {
-                        Sender = this.twitch.Username,
-                        Text = this.chatInput,
-                        // Analysis left at 0 for everything so your own messages always show up
-                    });
+                        this.twitch.SendMessage(this.currentChannel, this.chatInput);
+                        PushMessage(this.currentChannel, new ChatMessage
+                        {
+                            Sender = this.twitch.Username,
+                            Text = this.chatInput,
+                            // Analysis left at 0 for everything so your own messages always show up
+                        });
+                    }
                 }
 
                 ImGui.SameLine();
