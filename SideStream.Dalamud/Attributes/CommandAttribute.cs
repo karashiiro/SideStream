@@ -1,6 +1,6 @@
 using System;
 
-namespace SideStream.Attributes
+namespace SideStream.Dalamud.Attributes
 {
     [AttributeUsage(AttributeTargets.Method)]
     public class CommandAttribute : Attribute

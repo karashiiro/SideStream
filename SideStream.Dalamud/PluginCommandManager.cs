@@ -1,6 +1,6 @@
 ﻿using Dalamud.Game.Command;
 using Dalamud.Plugin;
-using SideStream.Attributes;
+using SideStream.Dalamud.Attributes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +9,7 @@ using static Dalamud.Game.Command.CommandInfo;
 
 // ReSharper disable ForCanBeConvertedToForeach
 
-namespace SideStream
+namespace SideStream.Dalamud
 {
     public class PluginCommandManager<THost> : IDisposable
     {

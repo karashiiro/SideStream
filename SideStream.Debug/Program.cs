@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Threading;
-using SideStream.Common;
 
 namespace SideStream.Debug
 {
@@ -20,9 +19,9 @@ namespace SideStream.Debug
                 {
                     Console.WriteLine("Joined channel #{0}", channel);
                 };
-                twitch.OnChannelMessageReceived += (sender, text) =>
+                twitch.OnChannelMessageReceived += (message) =>
                 {
-                    Console.WriteLine("{0}: {1} {2}", sender, ChatProcessingUtils.AnalyzeSentiment(text), text);
+                    Console.WriteLine("{0}: {1} {2}", message.Sender, message.CompoundScore, message.Text);
                 };
                 Console.WriteLine("Started.");
             });

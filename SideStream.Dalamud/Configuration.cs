@@ -2,7 +2,7 @@
 using Dalamud.Plugin;
 using Newtonsoft.Json;
 
-namespace SideStream
+namespace SideStream.Dalamud
 {
     public class Configuration : IPluginConfiguration
     {

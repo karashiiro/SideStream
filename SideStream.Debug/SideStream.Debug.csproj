@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SideStream.Common\SideStream.Common.csproj" />
+    <ProjectReference Include="..\SideStream\SideStream.csproj" />
   </ItemGroup>
 
 </Project>

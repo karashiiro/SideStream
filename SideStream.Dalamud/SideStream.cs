@@ -1,9 +1,8 @@
 ﻿using Dalamud.Plugin;
-using SideStream.Attributes;
-using SideStream.Common;
+using SideStream.Dalamud.Attributes;
 using System;
 
-namespace SideStream
+namespace SideStream.Dalamud
 {
     public class SideStream : IDalamudPlugin
     {
@@ -25,7 +24,7 @@ namespace SideStream
 
             this.twitch = new TwitchChatClient("karashiir", Environment.GetEnvironmentVariable("TWITCH_OAUTH_TOKEN"));
 
-            this.ui = new PluginUI();
+            this.ui = new PluginUI(this.twitch);
             this.pluginInterface.UiBuilder.OnBuildUi += this.ui.Draw;
             this.pluginInterface.UiBuilder.OnOpenConfigUi = (s, a) => this.ui.IsVisible = true;
 
@@ -39,12 +38,26 @@ namespace SideStream
             this.ui.IsVisible = !this.ui.IsVisible;
         }
 
+        [Command("/ssconnect")]
+        public void Connect(string command, string args)
+        {
+            var channel = args.Split(' ')[0];
+            this.twitch.ConnectChannel(channel);
+            this.twitch.OnChannelMessageReceived += message =>
+            {
+                this.ui.PushMessage(channel, message);
+            };
+            this.ui.RegisterChannel(channel);
+        }
+
         #region IDisposable Support
         protected virtual void Dispose(bool disposing)
         {
             if (!disposing) return;
 
             this.commandManager.Dispose();
+
+            this.twitch.Dispose();
 
             this.pluginInterface.SavePluginConfig(this.config);
 

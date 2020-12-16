@@ -1,7 +1,8 @@
 ﻿using System;
+using System.Linq;
 using IrcDotNet;
 
-namespace SideStream.Common
+namespace SideStream
 {
     public delegate void TwitchChatConnected();
     public delegate void TwitchChatConnectFailed();
@@ -10,13 +11,13 @@ namespace SideStream.Common
     public delegate void TwitchChatRegistered();
 
     public delegate void TwitchLocalUserNoticeReceived(string sender, string text);
-    public delegate void TwitchLocalUserMessageReceived(string sender, string text);
+    public delegate void TwitchLocalUserMessageReceived(ChatMessage message);
     public delegate void TwitchLocalUserJoinedChannel(string channel, string text);
     public delegate void TwitchLocalUserLeftChannel(string channel, string text);
 
     public delegate void TwitchChannelUserJoined(string sender, string text);
     public delegate void TwitchChannelUserLeft(string sender, string text);
-    public delegate void TwitchChannelMessageReceived(string sender, string text);
+    public delegate void TwitchChannelMessageReceived(ChatMessage message);
     public delegate void TwitchChannelNoticeReceived(string sender, string text);
 
     public class TwitchChatClient : IDisposable
@@ -39,8 +40,12 @@ namespace SideStream.Common
         public TwitchChannelMessageReceived OnChannelMessageReceived { get; set; }
         public TwitchChannelNoticeReceived OnChannelNoticeReceived { get; set; }
 
+        public string Username { get; }
+
         public TwitchChatClient(string username, string oauthToken)
         {
+            Username = username;
+
             _client = new TwitchIrcClient {FloodPreventer = new IrcStandardFloodPreventer(4, 2000)};
             _client.Registered += Registered;
             _client.Disconnected += Disconnected;
@@ -56,9 +61,11 @@ namespace SideStream.Common
             });
         }
 
-        public void ConnectChannel(string channel) => _client.SendRawMessage($"JOIN #{channel}");
+        public void ConnectChannel(string channel) => _client.Channels.Join($"#{channel}");
 
-        public void DisconnectChannel(string channel) => _client.SendRawMessage($"PART #{channel}");
+        public void DisconnectChannel(string channel) => _client.Channels.Leave($"#{channel}");
+
+        public void SendMessage(string channel, string message) => _client.SendRawMessage($"PRIVMSG #{channel} {message}");
 
         public void Disconnect() => _client.Disconnect();
 
@@ -90,7 +97,18 @@ namespace SideStream.Common
             => OnChannelNoticeReceived?.Invoke(e.Source.Name, e.Text);
 
         private void ChannelMessageReceived(object sender, IrcMessageEventArgs e)
-            => OnChannelMessageReceived?.Invoke(e.Source.Name, e.Text);
+        {
+            var analysis = ChatProcessingUtils.AnalyzeSentiment(e.Text);
+            OnChannelMessageReceived?.Invoke(new ChatMessage
+            {
+                Text = e.Text,
+                Sender = e.Source.Name,
+                NegativeScore = analysis.Negative,
+                CompoundScore = analysis.Compound,
+                NeutralScore = analysis.Neutral,
+                PositiveScore = analysis.Positive,
+            });
+        }
 
         private void ChannelUserLeft(object sender, IrcChannelUserEventArgs e)
             => OnChannelUserLeft?.Invoke(e.ChannelUser.User.UserName, e.Comment);
@@ -109,7 +127,18 @@ namespace SideStream.Common
         }
 
         private void LocalUserMessageReceived(object sender, IrcMessageEventArgs e)
-            => OnLocalUserMessageReceived?.Invoke(e.Source.Name, e.Text);
+        {
+            var analysis = ChatProcessingUtils.AnalyzeSentiment(e.Text);
+            OnLocalUserMessageReceived?.Invoke(new ChatMessage
+            {
+                Text = e.Text,
+                Sender = e.Source.Name,
+                NegativeScore = analysis.Negative,
+                CompoundScore = analysis.Compound,
+                NeutralScore = analysis.Neutral,
+                PositiveScore = analysis.Positive,
+            });
+        }
 
         private void LocalUserNoticeReceived(object sender, IrcMessageEventArgs e)
             => OnLocalUserNoticeReceived?.Invoke(e.Source.Name, e.Text);
