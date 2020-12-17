@@ -22,9 +22,11 @@ namespace SideStream.Dalamud
             this.config = (Configuration)this.pluginInterface.GetPluginConfig() ?? new Configuration();
             this.config.Initialize(this.pluginInterface);
 
-            this.twitch = new TwitchChatClient("karashiir", Environment.GetEnvironmentVariable("TWITCH_OAUTH_TOKEN"));
+            var credential = CredentialUtils.GetPluginCredential();
+            if (credential != null)
+                this.twitch = new TwitchChatClient(credential.UserName, credential.Password);
 
-            this.ui = new PluginUI(this.twitch);
+            this.ui = new PluginUI(this.twitch, loggedInTwitch => this.twitch = loggedInTwitch);
             this.pluginInterface.UiBuilder.OnBuildUi += this.ui.Draw;
             this.pluginInterface.UiBuilder.OnOpenConfigUi = (s, a) => this.ui.IsVisible = true;
 

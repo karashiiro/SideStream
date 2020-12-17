@@ -1,8 +1,12 @@
-﻿using ImGuiNET;
+﻿using System;
+using ImGuiNET;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
+using Lumina.Excel.GeneratedSheets;
+using ImGuiWindowFlags = ImGuiNET.ImGuiWindowFlags;
 
 namespace SideStream.Dalamud
 {
@@ -11,20 +15,30 @@ namespace SideStream.Dalamud
         private static readonly Vector4 Blue = ImGui.ColorConvertU32ToFloat4(0xFFFFB300);
         private static readonly Vector4 DarkBlue = ImGui.ColorConvertU32ToFloat4(0xFF694900);
         private static readonly Vector4 LightBlue = ImGui.ColorConvertU32ToFloat4(0xFFFFDD00);
+        private static readonly Vector4 HintColor = new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
 
-        private readonly TwitchChatClient twitch;
+        private readonly Action<TwitchChatClient> loginCallback;
+        private TwitchChatClient twitch;
         private readonly IDictionary<string, ConcurrentQueue<ChatMessage>> chatState;
         private string currentChannel;
         private bool hideNegativeMessages;
+        private Vector2 windowSize;
 
         private bool isVisible;
         public bool IsVisible { get => isVisible; set => isVisible = value; }
 
-        public PluginUI(TwitchChatClient twitch)
+        public PluginUI(TwitchChatClient twitch, Action<TwitchChatClient> loginCallback)
         {
+            this.loginCallback = loginCallback;
             this.twitch = twitch;
             this.chatState = new ConcurrentDictionary<string, ConcurrentQueue<ChatMessage>>();
             this.currentChannel = null;
+
+            this.windowSize = new Vector2(600, 400);
+
+#if DEBUG
+            this.isVisible = true;
+#endif
         }
 
         private void RegisterChannel(string channel)
@@ -61,47 +75,90 @@ namespace SideStream.Dalamud
             ImGui.PushStyleColor(ImGuiCol.CheckMark, Blue);
             ImGui.PushStyleColor(ImGuiCol.ButtonActive, LightBlue);
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, DarkBlue);
-            ImGui.Begin("SideStream", ref this.isVisible, ImGuiWindowFlags.None);
+            if (this.twitch != null)
             {
-                DrawTabs();
-                
-                ImGui.BeginChildFrame(0x92929292, ImGui.GetWindowSize() - new Vector2(16f, 94f));
-                if (!string.IsNullOrEmpty(this.currentChannel))
-                {
-                    foreach (var message in this.chatState[this.currentChannel])
-                    {
-                        if (this.hideNegativeMessages && message.CompoundScore < 0)
-                            continue;
-                        ImGui.TextWrapped($"{message.Sender}: {message.Text}");
-                    }
-                }
-                ImGui.EndChildFrame();
-
-                if (ImGui.InputTextWithHint(
-                    "##SideStreamChatInput",
-                    "Send a message",
-                    ref this.chatInput,
-                    500,
-                    ImGuiInputTextFlags.EnterReturnsTrue))
-                {
-                    if (!string.IsNullOrEmpty(this.currentChannel))
-                    {
-                        this.twitch.SendMessage(this.currentChannel, this.chatInput);
-                        PushMessage(this.currentChannel, new ChatMessage
-                        {
-                            Sender = this.twitch.Username,
-                            Text = this.chatInput,
-                            // Analysis left at 0 for everything so your own messages always show up
-                        });
-                        this.chatInput = string.Empty;
-                    }
-                }
-
-                ImGui.SameLine();
-                ImGui.Checkbox("Hide negative messages", ref this.hideNegativeMessages);
+                ImGui.SetNextWindowSize(this.windowSize, ImGuiCond.FirstUseEver);
+                ImGui.Begin("SideStream", ref this.isVisible, ImGuiWindowFlags.None);
+                this.windowSize = ImGui.GetWindowSize();
+                DrawMain();
+            }
+            else
+            {
+                ImGui.Begin("SideStream", ref this.isVisible, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoResize);
+                DrawLogin();
             }
             ImGui.End();
             ImGui.PopStyleColor(4);
+        }
+
+        private string username = string.Empty;
+        private string oauthToken = string.Empty;
+        private void DrawLogin()
+        {
+            ImGui.InputTextWithHint("##SideStreamAuthUsername", "Username", ref this.username, 15);
+            ImGui.InputTextWithHint("##SideStreamAuthOAuth2", "OAuth2 Token", ref this.oauthToken, 50);
+
+            if (ImGui.Button("Login##SideStreamAuthLogin"))
+            {
+                var loggedInTwitch = new TwitchChatClient(this.username, this.oauthToken);
+
+                CredentialUtils.SavePluginCredential(this.username, this.oauthToken);
+                this.twitch = loggedInTwitch;
+                this.loginCallback(loggedInTwitch);
+
+                ImGui.SetWindowSize(this.windowSize);
+
+                this.username = string.Empty;
+                this.oauthToken = string.Empty;
+            }
+
+            ImGui.TextColored(HintColor, "Credentials secured with Windows Credential Manager");
+
+            ImGui.Spacing();
+            if (ImGui.Button("Get OAuth2 Token##SideStreamAuthGetToken"))
+            {
+                Process.Start("https://twitchapps.com/tmi/");
+            }
+        }
+
+        private void DrawMain()
+        {
+            DrawTabs();
+
+            ImGui.BeginChildFrame(0x92929292, ImGui.GetWindowSize() - new Vector2(16f, 94f));
+            if (!string.IsNullOrEmpty(this.currentChannel))
+            {
+                foreach (var message in this.chatState[this.currentChannel])
+                {
+                    if (this.hideNegativeMessages && message.CompoundScore < 0)
+                        continue;
+                    ImGui.TextWrapped($"{message.Sender}: {message.Text}");
+                }
+            }
+            ImGui.EndChildFrame();
+
+            if (ImGui.InputTextWithHint(
+                "##SideStreamChatInput",
+                "Send a message",
+                ref this.chatInput,
+                500,
+                ImGuiInputTextFlags.EnterReturnsTrue))
+            {
+                if (!string.IsNullOrEmpty(this.currentChannel))
+                {
+                    this.twitch.SendMessage(this.currentChannel, this.chatInput);
+                    PushMessage(this.currentChannel, new ChatMessage
+                    {
+                        Sender = this.twitch.Username,
+                        Text = this.chatInput,
+                        // Analysis left at 0 for everything so your own messages always show up
+                    });
+                    this.chatInput = string.Empty;
+                }
+            }
+
+            ImGui.SameLine();
+            ImGui.Checkbox("Hide negative messages", ref this.hideNegativeMessages);
         }
 
         private string nextChannelName = string.Empty;
@@ -125,7 +182,7 @@ namespace SideStream.Dalamud
                     ImGui.EndTabItem();
                 }
 
-                if (ImGui.BeginTabItem("+##SideStream"))
+                if (ImGui.BeginTabItem("+##SideStreamAddChannel"))
                 {
                     if (ImGui.BeginPopupContextItem("##SideStreamAddChannelInputPopup", 0))
                     {
@@ -139,6 +196,22 @@ namespace SideStream.Dalamud
                             RegisterChannel(this.nextChannelName);
                             SwitchChannel(this.nextChannelName);
                             this.nextChannelName = string.Empty;
+                            ImGui.CloseCurrentPopup();
+                        }
+                        ImGui.EndPopup();
+                    }
+                    ImGui.EndTabItem();
+                }
+
+                if (ImGui.BeginTabItem("Settings##SideStreamSettings"))
+                {
+                    if (ImGui.BeginPopupContextItem("##SideStreamSettingsPopup", 0))
+                    {
+                        if (ImGui.Selectable("Logout"))
+                        {
+                            this.twitch = null;
+                            SwitchChannel(null);
+                            CredentialUtils.RemovePluginCredential();
                             ImGui.CloseCurrentPopup();
                         }
                         ImGui.EndPopup();
