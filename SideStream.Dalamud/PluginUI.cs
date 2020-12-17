@@ -22,6 +22,7 @@ namespace SideStream.Dalamud
         private readonly IDictionary<string, ConcurrentQueue<ChatMessage>> chatState;
         private string currentChannel;
         private bool hideNegativeMessages;
+        private bool filterMenuOpen;
         private Vector2 windowSize;
 
         private bool isVisible;
@@ -112,7 +113,12 @@ namespace SideStream.Dalamud
                 ImGui.SetNextWindowSize(this.windowSize, ImGuiCond.FirstUseEver);
                 ImGui.Begin("SideStream", ref this.isVisible, ImGuiWindowFlags.None);
                 this.windowSize = ImGui.GetWindowSize();
-                DrawMain();
+
+                DrawTabs();
+                if (this.filterMenuOpen)
+                    DrawFiltersMenu();
+                else
+                    DrawMain();
             }
             else
             {
@@ -121,6 +127,49 @@ namespace SideStream.Dalamud
             }
             ImGui.End();
             ImGui.PopStyleColor(4);
+        }
+
+        private void DrawFiltersMenu()
+        {
+            var listItems = this.config.Bad;
+            ImGui.TextWrapped("Filters provided here will prevent matching chat messages from being shown in chat.");
+            for (var i = 0; i < listItems.Count; i++)
+            {
+                var str = listItems[i].Text;
+                if (ImGui.InputTextWithHint($"###SideStreamFilter{i}", "Enter filter", ref str, 100))
+                {
+                    listItems[i].Text = str;
+                    this.config.Save();
+                }
+
+                ImGui.SameLine();
+                var isRegex = listItems[i].IsRegex;
+                if (ImGui.Checkbox($"Regex###SideStreamRegexFilter{i}", ref isRegex))
+                {
+                    listItems[i].IsRegex = isRegex;
+                    this.config.Save();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button($"Remove###SideStreamRemoveFilter{i}"))
+                {
+                    listItems[i].ShouldRemove = true;
+                }
+            }
+
+            for (var j = 0; j < listItems.Count; j++)
+            {
+                if (listItems[j].ShouldRemove)
+                {
+                    listItems.RemoveAt(j);
+                    this.config.Save();
+                }
+            }
+
+            if (ImGui.Button("Add filter"))
+            {
+                listItems.Add(new Trigger());
+            }
         }
 
         private string username = string.Empty;
@@ -158,8 +207,6 @@ namespace SideStream.Dalamud
 
         private void DrawMain()
         {
-            DrawTabs();
-
             ImGui.BeginChildFrame(0x92929292, ImGui.GetWindowSize() - new Vector2(16f, 94f));
             if (!string.IsNullOrEmpty(this.currentChannel))
             {
@@ -172,7 +219,7 @@ namespace SideStream.Dalamud
                         continue;
 
                     ImGui.TextColored(ImGui.ColorConvertU32ToFloat4(message.Sender.Color), message.Sender.Name);
-                    ImGui.SameLine(ImGui.CalcTextSize(message.Sender.Name).X + 6);
+                    ImGui.SameLine(ImGui.CalcTextSize(message.Sender.Name).X + 5);
                     ImGui.TextWrapped($": {message.Text}");
                 }
             }
@@ -211,16 +258,19 @@ namespace SideStream.Dalamud
                 {
                     var open = channel == this.currentChannel;
                     var openAfter = open;
-                    if (!ImGui.BeginTabItem($"{channel}##SideStream", ref openAfter)) continue;
-                    if (open != openAfter)
+                    if (ImGui.BeginTabItem($"{channel}##SideStreamTab{channel}", ref openAfter))
                     {
-                        UnregisterChannel(this.currentChannel);
-                        this.currentChannel = this.chatState.Keys.FirstOrDefault();
+                        if (open != openAfter)
+                        {
+                            UnregisterChannel(this.currentChannel);
+                            this.currentChannel = this.chatState.Keys.FirstOrDefault();
+                            ImGui.EndTabItem();
+                            continue;
+                        }
+
+                        SwitchChannel(channel);
                         ImGui.EndTabItem();
-                        continue;
                     }
-                    SwitchChannel(channel);
-                    ImGui.EndTabItem();
                 }
 
                 if (ImGui.BeginTabItem("+##SideStreamAddChannel"))
@@ -241,6 +291,12 @@ namespace SideStream.Dalamud
                         }
                         ImGui.EndPopup();
                     }
+                    ImGui.EndTabItem();
+                }
+
+                if (ImGui.BeginTabItem("Filters##SideStreamFiltersTab"))
+                {
+                    this.filterMenuOpen = true;
                     ImGui.EndTabItem();
                 }
 
@@ -266,6 +322,7 @@ namespace SideStream.Dalamud
         private void SwitchChannel(string channel)
         {
             this.currentChannel = channel;
+            this.filterMenuOpen = false;
             this.chatInput = string.Empty;
         }
     }

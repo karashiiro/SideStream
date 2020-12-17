@@ -5,8 +5,9 @@ namespace SideStream
 {
     public class Trigger
     {
-        public string Text { get; set; }
+        public string Text { get; set; } = "";
         public bool IsRegex { get; set; }
+        public bool ShouldRemove { get; set; }
 
         public bool Match(string test)
         {
