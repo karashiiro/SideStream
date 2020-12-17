@@ -26,7 +26,7 @@ namespace SideStream.Dalamud
             if (credential != null)
                 this.twitch = new TwitchChatClient(credential.UserName, credential.Password);
 
-            this.ui = new PluginUI(this.twitch, loggedInTwitch => this.twitch = loggedInTwitch);
+            this.ui = new PluginUI(this.twitch, loggedInTwitch => this.twitch = loggedInTwitch, this.config);
             this.pluginInterface.UiBuilder.OnBuildUi += this.ui.Draw;
             this.pluginInterface.UiBuilder.OnOpenConfigUi = (s, a) => this.ui.IsVisible = true;
 

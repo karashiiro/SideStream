@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
-using Lumina.Excel.GeneratedSheets;
+using Dalamud.Plugin;
 using ImGuiWindowFlags = ImGuiNET.ImGuiWindowFlags;
 
 namespace SideStream.Dalamud
@@ -17,6 +17,7 @@ namespace SideStream.Dalamud
         private static readonly Vector4 LightBlue = ImGui.ColorConvertU32ToFloat4(0xFFFFDD00);
         private static readonly Vector4 HintColor = new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
 
+        private readonly Configuration config;
         private readonly Action<TwitchChatClient> loginCallback;
         private TwitchChatClient twitch;
         private readonly IDictionary<string, ConcurrentQueue<ChatMessage>> chatState;
@@ -27,12 +28,16 @@ namespace SideStream.Dalamud
         private bool isVisible;
         public bool IsVisible { get => isVisible; set => isVisible = value; }
 
-        public PluginUI(TwitchChatClient twitch, Action<TwitchChatClient> loginCallback)
+        public PluginUI(TwitchChatClient twitch, Action<TwitchChatClient> loginCallback, Configuration config)
         {
+            this.config = config;
             this.loginCallback = loginCallback;
             this.twitch = twitch;
             this.chatState = new ConcurrentDictionary<string, ConcurrentQueue<ChatMessage>>();
             this.currentChannel = null;
+
+            foreach (var channel in this.config.Channels)
+                RegisterChannel(channel);
 
             this.windowSize = new Vector2(600, 400);
 
@@ -43,17 +48,28 @@ namespace SideStream.Dalamud
 
         private void RegisterChannel(string channel)
         {
+            if (this.chatState.ContainsKey(channel))
+            {
+                this.currentChannel = channel;
+                return;
+            }
+            
+            if (!this.config.Channels.Contains(channel))
+            {
+                this.config.Channels.Add(channel);
+                this.config.Save();
+            }
+            
             this.chatState.Add(channel, new ConcurrentQueue<ChatMessage>());
             this.currentChannel = channel;
-            this.twitch.ConnectChannel(this.nextChannelName);
-            this.twitch.OnChannelMessageReceived += message =>
-            {
-                PushMessage(this.nextChannelName, message);
-            };
+            this.twitch.ConnectChannel(channel);
+            this.twitch.OnChannelMessageReceived += message => PushMessage(channel, message);
         }
 
         private void UnregisterChannel(string channel)
         {
+            this.config.Channels.Remove(channel);
+            this.config.Save();
             this.chatState.Remove(channel);
             this.twitch.DisconnectChannel(channel);
         }
