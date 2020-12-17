@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
-using Dalamud.Plugin;
 using ImGuiWindowFlags = ImGuiNET.ImGuiWindowFlags;
 
 namespace SideStream.Dalamud
@@ -36,14 +35,22 @@ namespace SideStream.Dalamud
             this.chatState = new ConcurrentDictionary<string, ConcurrentQueue<ChatMessage>>();
             this.currentChannel = null;
 
-            foreach (var channel in this.config.Channels)
-                RegisterChannel(channel);
+            if (this.twitch != null)
+                LoadChannels();
 
             this.windowSize = new Vector2(600, 400);
 
 #if DEBUG
             this.isVisible = true;
 #endif
+        }
+
+        private bool configLoaded;
+        private void LoadChannels()
+        {
+            foreach (var channel in this.config.Channels)
+                RegisterChannel(channel);
+            this.configLoaded = true;
         }
 
         private void RegisterChannel(string channel)
@@ -59,11 +66,11 @@ namespace SideStream.Dalamud
                 this.config.Channels.Add(channel);
                 this.config.Save();
             }
-            
+
             this.chatState.Add(channel, new ConcurrentQueue<ChatMessage>());
             this.currentChannel = channel;
             this.twitch.ConnectChannel(channel);
-            this.twitch.OnChannelMessageReceived += message => PushMessage(channel, message);
+            this.twitch.OnChannelMessageReceived += PushMessageCurried(channel);
         }
 
         private void UnregisterChannel(string channel)
@@ -72,6 +79,15 @@ namespace SideStream.Dalamud
             this.config.Save();
             this.chatState.Remove(channel);
             this.twitch.DisconnectChannel(channel);
+            this.twitch.OnChannelMessageReceived -= PushMessageCurried(channel);
+        }
+
+        private TwitchChannelMessageReceived PushMessageCurried(string channel)
+        {
+            return message =>
+            {
+                PushMessage(channel, message);
+            };
         }
 
         private void PushMessage(string channel, ChatMessage message)
@@ -122,6 +138,9 @@ namespace SideStream.Dalamud
                 this.twitch = loggedInTwitch;
                 this.loginCallback(loggedInTwitch);
 
+                if (!this.configLoaded)
+                    LoadChannels();
+
                 ImGui.SetWindowSize(this.windowSize);
 
                 this.username = string.Empty;
@@ -148,7 +167,13 @@ namespace SideStream.Dalamud
                 {
                     if (this.hideNegativeMessages && message.CompoundScore < 0)
                         continue;
-                    ImGui.TextWrapped($"{message.Sender}: {message.Text}");
+
+                    if (this.config.Bad.Any(t => t.Text != "" && t.Match(message.Text)))
+                        continue;
+
+                    ImGui.TextColored(ImGui.ColorConvertU32ToFloat4(message.Sender.Color), message.Sender.Name);
+                    ImGui.SameLine(ImGui.CalcTextSize(message.Sender.Name).X + 6);
+                    ImGui.TextWrapped($": {message.Text}");
                 }
             }
             ImGui.EndChildFrame();
@@ -165,7 +190,7 @@ namespace SideStream.Dalamud
                     this.twitch.SendMessage(this.currentChannel, this.chatInput);
                     PushMessage(this.currentChannel, new ChatMessage
                     {
-                        Sender = this.twitch.Username,
+                        Sender = new User(this.twitch.Username),
                         Text = this.chatInput,
                         // Analysis left at 0 for everything so your own messages always show up
                     });

@@ -30,6 +30,6 @@
         /// <summary>
         /// The sender of the message.
         /// </summary>
-        public string Sender { get; set; }
+        public User Sender { get; set; }
     }
 }

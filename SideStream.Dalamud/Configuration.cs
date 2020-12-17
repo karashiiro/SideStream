@@ -11,6 +11,8 @@ namespace SideStream.Dalamud
 
         public IList<string> Channels { get; set; }
 
+        public IList<Trigger> Bad { get; set; }
+
         // Add any other properties or methods here.
         [JsonIgnore] private DalamudPluginInterface pluginInterface;
 
@@ -19,6 +21,8 @@ namespace SideStream.Dalamud
             this.pluginInterface = pluginInterface;
 
             Channels ??= new List<string>();
+
+            Bad ??= new List<Trigger>();
         }
 
         public void Save()
