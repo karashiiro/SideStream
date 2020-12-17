@@ -1,6 +1,7 @@
 ﻿using ImGuiNET;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace SideStream.Dalamud
@@ -26,16 +27,24 @@ namespace SideStream.Dalamud
             this.currentChannel = null;
         }
 
-        public void RegisterChannel(string channel)
+        private void RegisterChannel(string channel)
         {
             this.chatState.Add(channel, new ConcurrentQueue<ChatMessage>());
             this.currentChannel = channel;
+            this.twitch.ConnectChannel(this.nextChannelName);
+            this.twitch.OnChannelMessageReceived += message =>
+            {
+                PushMessage(this.nextChannelName, message);
+            };
         }
 
-        public void UnregisterChannel(string channel)
-            => this.chatState.Remove(channel);
+        private void UnregisterChannel(string channel)
+        {
+            this.chatState.Remove(channel);
+            this.twitch.DisconnectChannel(channel);
+        }
 
-        public void PushMessage(string channel, ChatMessage message)
+        private void PushMessage(string channel, ChatMessage message)
         {
             this.chatState[channel].Enqueue(message);
             while (this.chatState[channel].Count > 5000)
@@ -84,6 +93,7 @@ namespace SideStream.Dalamud
                             Text = this.chatInput,
                             // Analysis left at 0 for everything so your own messages always show up
                         });
+                        this.chatInput = string.Empty;
                     }
                 }
 
@@ -94,14 +104,45 @@ namespace SideStream.Dalamud
             ImGui.PopStyleColor(4);
         }
 
+        private string nextChannelName = string.Empty;
         private void DrawTabs()
         {
             ImGui.BeginTabBar("SideStream##Tabs");
             {
                 foreach (var channel in this.chatState.Keys)
                 {
-                    if (!ImGui.BeginTabItem($"{channel}##SideStream")) continue;
+                    var open = channel == this.currentChannel;
+                    var openAfter = open;
+                    if (!ImGui.BeginTabItem($"{channel}##SideStream", ref openAfter)) continue;
+                    if (open != openAfter)
+                    {
+                        UnregisterChannel(this.currentChannel);
+                        this.currentChannel = this.chatState.Keys.FirstOrDefault();
+                        ImGui.EndTabItem();
+                        continue;
+                    }
                     SwitchChannel(channel);
+                    ImGui.EndTabItem();
+                }
+
+                if (ImGui.BeginTabItem("+##SideStream"))
+                {
+                    if (ImGui.BeginPopupContextItem("##SideStreamAddChannelInputPopup", 0))
+                    {
+                        if (ImGui.InputTextWithHint(
+                            "##SideStreamAddChannelInput",
+                            "Enter channel name",
+                            ref this.nextChannelName,
+                            15,
+                            ImGuiInputTextFlags.EnterReturnsTrue))
+                        {
+                            RegisterChannel(this.nextChannelName);
+                            SwitchChannel(this.nextChannelName);
+                            this.nextChannelName = string.Empty;
+                            ImGui.CloseCurrentPopup();
+                        }
+                        ImGui.EndPopup();
+                    }
                     ImGui.EndTabItem();
                 }
             }

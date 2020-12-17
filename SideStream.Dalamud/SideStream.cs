@@ -38,18 +38,6 @@ namespace SideStream.Dalamud
             this.ui.IsVisible = !this.ui.IsVisible;
         }
 
-        [Command("/ssconnect")]
-        public void Connect(string command, string args)
-        {
-            var channel = args.Split(' ')[0];
-            this.twitch.ConnectChannel(channel);
-            this.twitch.OnChannelMessageReceived += message =>
-            {
-                this.ui.PushMessage(channel, message);
-            };
-            this.ui.RegisterChannel(channel);
-        }
-
         #region IDisposable Support
         protected virtual void Dispose(bool disposing)
         {
