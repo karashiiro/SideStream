@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using IrcDotNet;
@@ -25,7 +24,7 @@ namespace SideStream
     public class TwitchChatClient : IDisposable
     {
         private readonly TwitchIrcClient _client;
-        private readonly HashSet<User> _knownUsers;
+        private readonly IList<User> _knownUsers;
 
         public TwitchChatConnected OnChatConnected { get; set; }
         public TwitchChatConnectFailed OnChatConnectFailed { get; set; }
@@ -49,7 +48,7 @@ namespace SideStream
         {
             Username = username;
 
-            _knownUsers = new HashSet<User>();
+            _knownUsers = new List<User>();
 
             _client = new TwitchIrcClient {FloodPreventer = new IrcStandardFloodPreventer(4, 2000)};
             _client.Registered += Registered;
@@ -64,6 +63,18 @@ namespace SideStream
                 Password = oauthToken,
                 UserName = username,
             });
+        }
+
+        public User GetOrCreateUser(string name)
+        {
+            var user = _knownUsers.FirstOrDefault(u => u.Name == name);
+            if (user == null)
+            {
+                user = new User(name);
+                _knownUsers.Add(user);
+            }
+
+            return user;
         }
 
         public void ConnectChannel(string channel) => _client.Channels.Join($"#{channel}");
@@ -99,31 +110,15 @@ namespace SideStream
         }
 
         private void ChannelNoticeReceived(object sender, IrcMessageEventArgs e)
-        {
-            var user = _knownUsers.FirstOrDefault(u => u.Name == e.Source.Name);
-            if (user == null)
-            {
-                user = new User(e.Source.Name);
-                _knownUsers.Add(user);
-            }
-
-            OnChannelNoticeReceived?.Invoke(user, e.Text);
-        }
+            => OnChannelNoticeReceived?.Invoke(GetOrCreateUser(e.Source.Name), e.Text);
 
         private void ChannelMessageReceived(object sender, IrcMessageEventArgs e)
         {
-            var user = _knownUsers.FirstOrDefault(u => u.Name == e.Source.Name);
-            if (user == null)
-            {
-                user = new User(e.Source.Name);
-                _knownUsers.Add(user);
-            }
-
             var analysis = ChatProcessingUtils.AnalyzeSentiment(e.Text);
             OnChannelMessageReceived?.Invoke(new ChatMessage
             {
                 Text = e.Text,
-                Sender = user,
+                Sender = GetOrCreateUser(e.Source.Name),
                 NegativeScore = analysis.Negative,
                 CompoundScore = analysis.Compound,
                 NeutralScore = analysis.Neutral,
@@ -132,28 +127,10 @@ namespace SideStream
         }
 
         private void ChannelUserLeft(object sender, IrcChannelUserEventArgs e)
-        {
-            var user = _knownUsers.FirstOrDefault(u => u.Name == e.ChannelUser.User.UserName);
-            if (user == null)
-            {
-                user = new User(e.ChannelUser.User.UserName);
-                _knownUsers.Add(user);
-            }
-
-            OnChannelUserLeft?.Invoke(user, e.Comment);
-        }
+            => OnChannelUserLeft?.Invoke(GetOrCreateUser(e.ChannelUser.User.UserName), e.Comment);
 
         private void ChannelUserJoined(object sender, IrcChannelUserEventArgs e)
-        {
-            var user = _knownUsers.FirstOrDefault(u => u.Name == e.ChannelUser.User.UserName);
-            if (user == null)
-            {
-                user = new User(e.ChannelUser.User.UserName);
-                _knownUsers.Add(user);
-            }
-
-            OnChannelUserJoined?.Invoke(user, e.Comment);
-        }
+            => OnChannelUserJoined?.Invoke(GetOrCreateUser(e.ChannelUser.User.UserName), e.Comment);
 
         private void LocalUserLeftChannel(object sender, IrcChannelEventArgs e)
         {
@@ -167,18 +144,11 @@ namespace SideStream
 
         private void LocalUserMessageReceived(object sender, IrcMessageEventArgs e)
         {
-            var user = _knownUsers.FirstOrDefault(u => u.Name == e.Source.Name);
-            if (user == null)
-            {
-                user = new User(e.Source.Name);
-                _knownUsers.Add(user);
-            }
-
             var analysis = ChatProcessingUtils.AnalyzeSentiment(e.Text);
             OnLocalUserMessageReceived?.Invoke(new ChatMessage
             {
                 Text = e.Text,
-                Sender = user,
+                Sender = GetOrCreateUser(e.Source.Name),
                 NegativeScore = analysis.Negative,
                 CompoundScore = analysis.Compound,
                 NeutralScore = analysis.Neutral,
@@ -187,16 +157,7 @@ namespace SideStream
         }
 
         private void LocalUserNoticeReceived(object sender, IrcMessageEventArgs e)
-        {
-            var user = _knownUsers.FirstOrDefault(u => u.Name == e.Source.Name);
-            if (user == null)
-            {
-                user = new User(e.Source.Name);
-                _knownUsers.Add(user);
-            }
-
-            OnLocalUserNoticeReceived?.Invoke(user, e.Text);
-        }
+            => OnLocalUserNoticeReceived?.Invoke(GetOrCreateUser(e.Source.Name), e.Text);
 
         private void Disconnected(object sender, EventArgs e)
             => OnChatDisconnected?.Invoke();

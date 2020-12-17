@@ -1,4 +1,6 @@
-﻿namespace SideStream
+﻿using System;
+
+namespace SideStream
 {
     public class User
     {
@@ -8,7 +10,10 @@
         public User(string username)
         {
             Name = username;
-            Color = (uint)username.GetHashCode();
+
+            var colors = Enum.GetNames(typeof(TwitchUsernameColors));
+            var index = new Random().Next(colors.Length);
+            Color = (uint)Enum.Parse(typeof(TwitchUsernameColors), colors[index]);
         }
     }
 }

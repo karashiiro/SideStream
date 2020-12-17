@@ -237,7 +237,7 @@ namespace SideStream.Dalamud
                     this.twitch.SendMessage(this.currentChannel, this.chatInput);
                     PushMessage(this.currentChannel, new ChatMessage
                     {
-                        Sender = new User(this.twitch.Username),
+                        Sender = this.twitch.GetOrCreateUser(this.twitch.Username),
                         Text = this.chatInput,
                         // Analysis left at 0 for everything so your own messages always show up
                     });
